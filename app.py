@@ -3,15 +3,15 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # =========================
-# CONFIG (UPDATE LINK CHUẨN)
+# CONFIG
 # =========================
 HISTORY_URL = "https://docs.google.com/spreadsheets/d/1yhBY-zRPlsd350gUEaEakIMmHeDsy7SCoyzONyoTiGM/export?format=csv&gid=1806324328"
 
-# 👉 THAY gid EVENT vào đây
+# 👉 UPDATE gid event của bạn
 EVENT_URL = "https://docs.google.com/spreadsheets/d/1yhBY-zRPlsd350gUEaEakIMmHeDsy7SCoyzONyoTiGM/edit?gid=1566812210#gid=1566812210"
 
 # =========================
-# LOAD DATA
+# LOAD HISTORY
 # =========================
 @st.cache_data(ttl=300)
 def load_history():
@@ -21,21 +21,31 @@ def load_history():
         st.error(f"Lỗi load HISTORY: {e}")
         return pd.DataFrame()
 
-    # rename cột đầu
+    # rename
     df.rename(columns={df.columns[0]: "Date"}, inplace=True)
 
-    # convert date
+    # date
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-    # sort
-    df = df.sort_values("Date")
+    # 🔥 CLEAN NUMBER (QUAN TRỌNG)
+    for col in df.columns[1:]:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.replace(",", "", regex=False)
+            .str.replace(" ", "", regex=False)
+        )
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # drop dòng lỗi
     df = df.dropna(subset=["Date"])
+    df = df.sort_values("Date")
 
     return df
 
 
+# =========================
+# LOAD EVENT
+# =========================
 @st.cache_data(ttl=300)
 def load_event():
     try:
@@ -108,7 +118,7 @@ if normalize:
     df_norm = df.copy()
     for col in selected_assets:
         base = df[col].iloc[0]
-        if base != 0:
+        if pd.notna(base) and base != 0:
             df_norm[col] = df[col] / base * 100
     df = df_norm
 
@@ -117,7 +127,6 @@ if normalize:
 # =========================
 fig = go.Figure()
 
-# MULTI AXIS
 for i, asset in enumerate(selected_assets):
     axis_name = f"y{i+1}"
 
@@ -128,13 +137,20 @@ for i, asset in enumerate(selected_assets):
         yaxis=axis_name
     ))
 
-    # label giá cuối
-    if show_last:
+    # 🔥 FIX LABEL (KHÔNG BAO GIỜ CRASH)
+    if show_last and len(df) > 0:
+        value = df[asset].iloc[-1]
+
+        if pd.notna(value):
+            label = f"{value:,.2f}"
+        else:
+            label = "N/A"
+
         fig.add_trace(go.Scatter(
             x=[df["Date"].iloc[-1]],
-            y=[df[asset].iloc[-1]],
+            y=[value],
             mode="markers+text",
-            text=[f"{df[asset].iloc[-1]:,.2f}"],
+            text=[label],
             textposition="middle right",
             showlegend=False,
             yaxis=axis_name
@@ -165,7 +181,6 @@ if not event_df.empty and "Ngày bắt đầu" in event_df.columns:
         if pd.isna(end):
             end = df["Date"].max()
 
-        # event range
         if start != end:
             fig.add_vrect(
                 x0=start,
@@ -176,7 +191,6 @@ if not event_df.empty and "Ngày bắt đầu" in event_df.columns:
                 annotation_text=label,
                 annotation_font_size=10
             )
-
         else:
             fig.add_vline(
                 x=start,
