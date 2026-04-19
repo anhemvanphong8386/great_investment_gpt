@@ -1,36 +1,53 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
 
 # =========================
-# CONFIG
+# CONFIG (UPDATE LINK CHUẨN)
 # =========================
-HISTORY_URL = "YOUR_HISTORY_CSV"
-EVENT_URL   = "YOUR_EVENT_CSV"
+HISTORY_URL = "https://docs.google.com/spreadsheets/d/1yhBY-zRPlsd350gUEaEakIMmHeDsy7SCoyzONyoTiGM/export?format=csv&gid=1806324328"
+
+# 👉 THAY gid EVENT vào đây
+EVENT_URL = "YOUR_EVENT_GID_LINK"
 
 # =========================
 # LOAD DATA
 # =========================
 @st.cache_data(ttl=300)
 def load_history():
-    df = pd.read_csv(HISTORY_URL)
+    try:
+        df = pd.read_csv(HISTORY_URL, skiprows=5)
+    except Exception as e:
+        st.error(f"Lỗi load HISTORY: {e}")
+        return pd.DataFrame()
 
-    df = df.iloc[5:].reset_index(drop=True)
+    # rename cột đầu
     df.rename(columns={df.columns[0]: "Date"}, inplace=True)
 
-    df["Date"] = pd.to_datetime(df["Date"])
+    # convert date
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+    # sort
     df = df.sort_values("Date")
+
+    # drop dòng lỗi
+    df = df.dropna(subset=["Date"])
 
     return df
 
 
 @st.cache_data(ttl=300)
 def load_event():
-    df = pd.read_csv(EVENT_URL)
+    try:
+        df = pd.read_csv(EVENT_URL)
+    except:
+        return pd.DataFrame()
 
-    df["Ngày bắt đầu"] = pd.to_datetime(df["Ngày bắt đầu"])
-    df["Ngày kết thúc"] = pd.to_datetime(df["Ngày kết thúc"], errors="coerce")
+    if "Ngày bắt đầu" in df.columns:
+        df["Ngày bắt đầu"] = pd.to_datetime(df["Ngày bắt đầu"], errors="coerce")
+
+    if "Ngày kết thúc" in df.columns:
+        df["Ngày kết thúc"] = pd.to_datetime(df["Ngày kết thúc"], errors="coerce")
 
     return df
 
@@ -43,6 +60,9 @@ st.title("🌍 Macro Market Dashboard")
 
 df = load_history()
 event_df = load_event()
+
+if df.empty:
+    st.stop()
 
 assets = df.columns[1:]
 
@@ -66,12 +86,6 @@ time_range = st.sidebar.selectbox(
 
 show_last = st.sidebar.checkbox("Hiển thị giá hiện tại", True)
 
-event_types = st.sidebar.multiselect(
-    "Lọc sự kiện",
-    event_df["Lĩnh vực"].dropna().unique(),
-    default=list(event_df["Lĩnh vực"].dropna().unique())
-)
-
 # =========================
 # FILTER TIME
 # =========================
@@ -93,7 +107,9 @@ df = filter_time(df)
 if normalize:
     df_norm = df.copy()
     for col in selected_assets:
-        df_norm[col] = df[col] / df[col].iloc[0] * 100
+        base = df[col].iloc[0]
+        if base != 0:
+            df_norm[col] = df[col] / base * 100
     df = df_norm
 
 # =========================
@@ -101,8 +117,7 @@ if normalize:
 # =========================
 fig = go.Figure()
 
-yaxis_count = 1
-
+# MULTI AXIS
 for i, asset in enumerate(selected_assets):
     axis_name = f"y{i+1}"
 
@@ -113,19 +128,18 @@ for i, asset in enumerate(selected_assets):
         yaxis=axis_name
     ))
 
-    # last value
+    # label giá cuối
     if show_last:
         fig.add_trace(go.Scatter(
             x=[df["Date"].iloc[-1]],
             y=[df[asset].iloc[-1]],
             mode="markers+text",
-            text=[f"{df[asset].iloc[-1]:.2f}"],
+            text=[f"{df[asset].iloc[-1]:,.2f}"],
             textposition="middle right",
             showlegend=False,
             yaxis=axis_name
         ))
 
-    # define axis
     fig.update_layout({
         axis_name: dict(
             overlaying="y",
@@ -134,43 +148,43 @@ for i, asset in enumerate(selected_assets):
     })
 
 # =========================
-# EVENT FILTER
-# =========================
-event_df = event_df[event_df["Lĩnh vực"].isin(event_types)]
-
-# =========================
 # EVENT OVERLAY
 # =========================
-for _, row in event_df.iterrows():
+if not event_df.empty and "Ngày bắt đầu" in event_df.columns:
 
-    start = row["Ngày bắt đầu"]
-    end   = row["Ngày kết thúc"]
-    label = row["Nội dung"]
-    color = row.get("Mã màu", "rgba(255,0,0,0.2)")
+    for _, row in event_df.iterrows():
 
-    if pd.isna(end):
-        end = df["Date"].max()
+        start = row.get("Ngày bắt đầu")
+        end   = row.get("Ngày kết thúc")
+        label = row.get("Nội dung", "")
+        color = row.get("Mã màu", "rgba(255,0,0,0.2)")
 
-    # RANGE EVENT
-    if start != end:
-        fig.add_vrect(
-            x0=start,
-            x1=end,
-            fillcolor=color,
-            opacity=0.2,
-            line_width=0,
-            annotation_text=label,
-            annotation_font_size=10
-        )
+        if pd.isna(start):
+            continue
 
-    else:
-        fig.add_vline(
-            x=start,
-            line_dash="dot",
-            line_color=color,
-            annotation_text=label,
-            annotation_font_size=10
-        )
+        if pd.isna(end):
+            end = df["Date"].max()
+
+        # event range
+        if start != end:
+            fig.add_vrect(
+                x0=start,
+                x1=end,
+                fillcolor=color,
+                opacity=0.2,
+                line_width=0,
+                annotation_text=label,
+                annotation_font_size=10
+            )
+
+        else:
+            fig.add_vline(
+                x=start,
+                line_dash="dot",
+                line_color=color,
+                annotation_text=label,
+                annotation_font_size=10
+            )
 
 # =========================
 # LAYOUT
