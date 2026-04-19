@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 HISTORY_URL = "https://docs.google.com/spreadsheets/d/1yhBY-zRPlsd350gUEaEakIMmHeDsy7SCoyzONyoTiGM/export?format=csv&gid=1806324328"
 
 # 👉 THAY gid EVENT vào đây
-EVENT_URL = "YOUR_EVENT_GID_LINK"
+EVENT_URL = "https://docs.google.com/spreadsheets/d/1yhBY-zRPlsd350gUEaEakIMmHeDsy7SCoyzONyoTiGM/edit?gid=1566812210#gid=1566812210"
 
 # =========================
 # LOAD DATA
