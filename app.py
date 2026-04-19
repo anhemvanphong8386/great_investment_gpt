@@ -128,7 +128,13 @@ if normalize:
 fig = go.Figure()
 
 for i, asset in enumerate(selected_assets):
-    axis_name = f"y{i+1}"
+
+    if i == 0:
+        axis_name = "y"
+        layout_axis = "yaxis"
+    else:
+        axis_name = f"y{i+1}"
+        layout_axis = f"yaxis{i+1}"
 
     fig.add_trace(go.Scatter(
         x=df["Date"],
@@ -137,14 +143,11 @@ for i, asset in enumerate(selected_assets):
         yaxis=axis_name
     ))
 
-    # 🔥 FIX LABEL (KHÔNG BAO GIỜ CRASH)
+    # label giá cuối
     if show_last and len(df) > 0:
         value = df[asset].iloc[-1]
 
-        if pd.notna(value):
-            label = f"{value:,.2f}"
-        else:
-            label = "N/A"
+        label = f"{value:,.2f}" if pd.notna(value) else "N/A"
 
         fig.add_trace(go.Scatter(
             x=[df["Date"].iloc[-1]],
@@ -156,8 +159,9 @@ for i, asset in enumerate(selected_assets):
             yaxis=axis_name
         ))
 
+    # 🔥 FIX ĐÚNG CHUẨN PLOTLY
     fig.update_layout({
-        axis_name: dict(
+        layout_axis: dict(
             overlaying="y",
             showticklabels=False
         )
